@@ -785,3 +785,73 @@ class SecurityScanner:
                         
                         if any(a in public_actions for a in actions):
                             return True
+        
+        return False
+    
+    def _is_overly_permissive_rule(self, rule: dict) -> bool:
+        """Check if a security group rule is overly permissive."""
+        # Check for 0.0.0.0/0 or ::/0
+        cidr_ipv4 = rule.get('CidrIpv4')
+        cidr_ipv6 = rule.get('CidrIpv6')
+        
+        if cidr_ipv4 == '0.0.0.0/0' or cidr_ipv6 == '::/0':
+            # Check if it's for SSH/RDP (common attack vectors)
+            from_port = rule.get('FromPort')
+            to_port = rule.get('ToPort')
+            
+            if from_port is not None and to_port is not None:
+                # SSH (22) or RDP (3389) open to world
+                if (from_port <= 22 <= to_port) or (from_port <= 3389 <= to_port):
+                    return True
+            
+            # Any port open to world
+            if from_port == -1 or to_port == -1:
+                return True
+        
+        return False
+    
+    def _calculate_risk_score(self, finding: SecurityFinding) -> float:
+        """Calculate risk score for a security finding."""
+        base_scores = {
+            SecuritySeverity.CRITICAL: 90,
+            SecuritySeverity.HIGH: 70,
+            SecuritySeverity.MEDIUM: 40,
+            SecuritySeverity.LOW: 20
+        }
+        
+        base_score = base_scores.get(finding.severity, 0)
+        
+        # Adjust based on category
+        category_weights = {
+            SecurityCategory.IDENTITY: 1.2,
+            SecurityCategory.DATA: 1.3,
+            SecurityCategory.NETWORK: 1.1,
+            SecurityCategory.COMPLIANCE: 1.0,
+            SecurityCategory.CONFIGURATION: 0.9
+        }
+        
+        weight = category_weights.get(finding.category, 1.0)
+        return min(100, base_score * weight)
+    
+    def _load_security_rules(self) -> List[Dict]:
+        """Load security scanning rules."""
+        return [
+            {
+                "id": "IAM_NO_MFA",
+                "title": "IAM User Without MFA",
+                "severity": "HIGH",
+                "category": "identity"
+            },
+            {
+                "id": "IAM_ADMIN_POLICY",
+                "title": "IAM Policy With Admin Privileges",
+                "severity": "CRITICAL",
+                "category": "identity"
+            },
+            {
+                "id": "S3_PUBLIC_ACL",
+                "title": "Public S3 Bucket",
+                "severity": "CRITICAL",
+                "category": "data"
+            }
+        ]
