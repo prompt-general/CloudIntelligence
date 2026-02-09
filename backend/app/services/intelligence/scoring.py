@@ -100,6 +100,15 @@ class ScoringEngine:
             if resource.get('connections_avg', 0) < 5:
                 base_score -= 25
         
+        elif resource_type == 'gcp:compute:instance':
+            # Check for GCP idle instances
+            if resource.get('avg_cpu_utilization', 0) < 5:
+                base_score -= 30
+        
+        elif resource_type == 'gcp:storage:bucket':
+            if resource.get('access_count_30d', 0) == 0:
+                base_score -= 40
+        
         # Normalize score
         return max(0.0, min(100.0, base_score))
     
@@ -135,6 +144,14 @@ class ScoringEngine:
             # Check for versioning
             if not resource.get('versioning_enabled', False):
                 base_score -= 10
+        
+        elif resource_type == 'gcp:compute:instance':
+            if resource.get('is_public', False):
+                base_score -= 50
+        
+        elif resource_type == 'gcp:storage:bucket':
+            if not resource.get('public_access_prevention', False):
+                base_score -= 40
         
         # Normalize score
         return max(0.0, min(100.0, base_score))
