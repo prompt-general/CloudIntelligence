@@ -64,7 +64,7 @@ class AttackPathAnalyzer:
         self.graph = nx.DiGraph()
     
     async def build_attack_graph(self, organization_id: str):
-        """Build attack graph for the organization."""
+        """Build attack graph for the organization and sync to Neo4j."""
         self.graph.clear()
         
         # Get all resources for the organization
@@ -106,7 +106,7 @@ class AttackPathAnalyzer:
             network_edges = await self._analyze_network(account)
             edges.extend(network_edges)
         
-        # Add nodes to graph
+        # Add nodes to memory graph
         for node in nodes:
             self.graph.add_node(
                 node.id,
@@ -119,7 +119,7 @@ class AttackPathAnalyzer:
                 properties=node.properties
             )
         
-        # Add edges to graph
+        # Add edges to memory graph
         for edge in edges:
             self.graph.add_edge(
                 edge.source_id,
@@ -128,12 +128,94 @@ class AttackPathAnalyzer:
                 weight=edge.weight,
                 properties=edge.properties
             )
+            
+        # Sync to Neo4j
+        await self._sync_to_neo4j(nodes, edges, organization_id)
         
         return {
             "nodes": len(nodes),
             "edges": len(edges),
             "accounts": len(accounts)
         }
+
+    async def _sync_to_neo4j(self, nodes: List[AttackNode], edges: List[AttackEdge], organization_id: str):
+        """Persist graph data to Neo4j."""
+        from app.core.neo4j_client import neo4j_client
+        
+        # Clear existing data for this organization
+        clear_query = "MATCH (n {organization_id: $org_id}) DETACH DELETE n"
+        await neo4j_client.execute_query(clear_query, {"org_id": organization_id})
+        
+        # Create nodes
+        create_node_query = """
+        UNWIND $nodes as node
+        MERGE (n:Resource {id: node.id})
+        SET n += node.properties,
+            n.name = node.name,
+            n.type = node.type,
+            n.account_id = node.account_id,
+            n.region = node.region,
+            n.risk_score = node.risk_score,
+            n.criticality = node.criticality,
+            n.organization_id = $org_id
+        WITH n, node
+        CALL apoc.create.addLabels(n, [node.type_label]) YIELD node as labeled_node
+        RETURN count(labeled_node)
+        """
+        
+        node_data = []
+        for node in nodes:
+            node_data.append({
+                "id": node.id,
+                "name": node.name,
+                "type": node.type.value,
+                "type_label": node.type.value.replace('_', '').capitalize(),
+                "account_id": node.account_id,
+                "region": node.region,
+                "risk_score": node.risk_score,
+                "criticality": node.criticality,
+                "properties": node.properties
+            })
+            
+        await neo4j_client.execute_query(create_node_query, {"nodes": node_data, "org_id": organization_id})
+        
+        # Create edges
+        create_edge_query = """
+        UNWIND $edges as edge
+        MATCH (source {id: edge.source_id})
+        MATCH (target {id: edge.target_id})
+        CALL apoc.create.relationship(source, edge.type, edge.properties, target) YIELD rel
+        RETURN count(rel)
+        """
+        
+        edge_data = []
+        for edge in edges:
+            edge_data.append({
+                "source_id": edge.source_id,
+                "target_id": edge.target_id,
+                "type": edge.type.value.upper(),
+                "properties": {**edge.properties, "weight": edge.weight}
+            })
+            
+        await neo4j_client.execute_query(create_edge_query, {"edges": edge_data})
+
+    async def find_attack_paths_neo4j(self, organization_id: str, limit: int = 5):
+        """Use Cypher to find deep attack paths from public exposure to critical data."""
+        from app.core.neo4j_client import neo4j_client
+        
+        query = """
+        MATCH (source {organization_id: $org_id, is_public: true})
+        MATCH (target {organization_id: $org_id, criticality: 'critical'})
+        MATCH path = shortestPath((source)-[*..10]->(target))
+        WHERE source <> target
+        RETURN path, 
+               reduce(s = 0, n IN nodes(path) | s + n.risk_score) as total_risk
+        ORDER BY total_risk DESC
+        LIMIT $limit
+        """
+        
+        results = await neo4j_client.execute_query(query, {"org_id": organization_id, "limit": limit})
+        return results
     
     async def find_attack_paths(
         self, 

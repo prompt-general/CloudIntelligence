@@ -18,11 +18,23 @@ async def lifespan(app: FastAPI):
     from app.database import init_db
     await init_db()
     
+    # Initialize Neo4j
+    try:
+        from app.core.neo4j_client import neo4j_client
+        neo4j_client.connect()
+    except Exception as e:
+        logger.error(f"Failed to connect to Neo4j on startup: {e}")
+    
     yield
     
     logger.info("Shutting down CloudIntelligence API...")
     # Cleanup
     await engine.dispose()
+    try:
+        from app.core.neo4j_client import neo4j_client
+        neo4j_client.close()
+    except Exception as e:
+        logger.error(f"Error closing Neo4j connection: {e}")
 
 app = FastAPI(
     title="CloudIntelligence API",
