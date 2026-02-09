@@ -45,7 +45,11 @@ class AnomalyDetector:
         return sorted(anomalies, key=lambda x: x["anomaly_score"])
 
     def _map_res_type(self, res_type: str) -> int:
-        mapping = {"ec2": 1, "s3": 2, "rds": 3, "lambda": 4, "iam": 5}
+        mapping = {
+            "ec2": 1, "s3": 2, "rds": 3, "lambda": 4, "iam": 5, 
+            "gce": 6, "gcs": 7,
+            "azure_vm": 8, "azure_storage": 9
+        }
         return mapping.get(res_type.lower(), 0)
 
     def _map_action(self, action: str) -> int:
