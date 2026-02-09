@@ -108,6 +108,28 @@ class SecurityScanner:
                     evidence=f,
                     detected_at=datetime.utcnow()
                 ))
+        elif account.provider == "azure":
+            from app.services.azure.scanner import AzureScanner
+            azure_scanner = AzureScanner(self.db)
+            _, azure_findings = await azure_scanner.scan_account(account)
+            
+            # Convert Azure findings to SecurityFinding objects
+            for f in azure_findings:
+                findings.append(SecurityFinding(
+                    id=f"{f['rule_id']}_{account.account_id}",
+                    resource_id=f.get("resource_id", "unknown"),
+                    resource_type=f.get("resource_type", "unknown"),
+                    account_id=account.account_id,
+                    region=f.get("region", "global"),
+                    rule_id=f["rule_id"],
+                    title=f["title"],
+                    description=f["description"],
+                    severity=SecuritySeverity(f["severity"]),
+                    category=SecurityCategory.CONFIGURATION,
+                    remediation="Follow Azure security best practices to remediate this issue.",
+                    evidence=f,
+                    detected_at=datetime.utcnow()
+                ))
         
         return findings
     
