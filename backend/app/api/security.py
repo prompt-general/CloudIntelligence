@@ -328,6 +328,18 @@ async def get_attack_paths(
         "generated_at": datetime.utcnow().isoformat()
     }
 
+@router.get("/attack-paths/deep")
+async def get_deep_attack_paths(
+    limit: int = Query(5, description="Limit results"),
+    current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
+    db: AsyncSession = Depends(get_db)
+):
+    """Use Neo4j to find deep attack paths to critical assets."""
+    analyzer = AttackPathAnalyzer(db)
+    results = await analyzer.find_attack_paths_neo4j(str(organization.id), limit=limit)
+    return results
+
 @router.get("/attack-graph")
 async def get_attack_graph(
     current_user: User = Depends(get_current_user),

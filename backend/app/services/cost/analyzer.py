@@ -180,26 +180,16 @@ class CostAnalyzer:
         current_cost: float,
         days: int = 30
     ) -> float:
-        """Forecast future costs using time-series analysis."""
-        # Simple forecasting model (would be replaced with Prophet/LSTM)
-        from app.models.resource import Resource
-        from app.models.cloud_account import CloudAccount
+        """Forecast future costs using enhanced time-series analysis."""
+        from app.services.cost.forecaster import CostForecaster
+        forecaster = CostForecaster(self.db)
         
-        # Get resource growth trend
-        result = await self.db.execute(
-            select(func.count(Resource.id)).join(
-                CloudAccount, Resource.cloud_account_id == CloudAccount.id
-            ).where(
-                CloudAccount.organization_id == organization_id
-            )
-        )
-        resource_count = result.scalar()
-        
-        # Simple linear forecast based on resource growth
-        growth_rate = 0.1  # 10% monthly growth
-        forecast = current_cost * (1 + growth_rate)
-        
-        return forecast
+        forecast_data = await forecaster.forecast(organization_id, periods=days)
+        if forecast_data:
+            # Sum the yhat values for the next 30 days
+            return sum(item['yhat'] for item in forecast_data)
+            
+        return current_cost * 1.05  # Fallback
     
     async def _detect_cost_anomalies(self, cost_data: List[Dict]) -> List[Dict[str, Any]]:
         """Detect cost anomalies using statistical methods."""

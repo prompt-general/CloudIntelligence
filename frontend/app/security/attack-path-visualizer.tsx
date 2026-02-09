@@ -117,6 +117,43 @@ export function AttackPathVisualizer() {
         }
     }
 
+    const fetchDeepAttackPaths = async () => {
+        setIsLoading(true)
+        try {
+            const token = localStorage.getItem('access_token')
+            const response = await fetch('http://localhost:8000/api/v1/security/attack-paths/deep?limit=5', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            if (response.ok) {
+                const results = await response.json()
+                // Map Neo4j results to the AttackPath interface
+                const paths = results.map((r: any) => ({
+                    nodes: r.path.nodes.map((n: any) => ({
+                        id: n.id,
+                        name: n.name,
+                        type: n.type,
+                        risk_score: n.risk_score,
+                        criticality: n.criticality,
+                        account_id: n.account_id,
+                        region: n.region
+                    })),
+                    total_risk: r.total_risk,
+                    path_length: r.path.segments.length,
+                    critical_nodes: r.path.nodes.filter((n: any) => n.criticality === 'critical').map((n: any) => n.id)
+                }))
+                setAttackPaths(paths)
+                setSelectedPath(0)
+            }
+        } catch (error) {
+            console.error('Failed to fetch deep attack paths:', error)
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     const calculateBlastRadius = async (nodeId: string) => {
         try {
             const token = localStorage.getItem('access_token')
@@ -311,6 +348,10 @@ export function AttackPathVisualizer() {
                             <Button variant="outline" onClick={fetchAttackGraph}>
                                 Refresh
                             </Button>
+                            <Button className="bg-purple-600 hover:bg-purple-700 gap-2" onClick={fetchDeepAttackPaths}>
+                                <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin-slow"></div>
+                                Deep Analysis (Neo4j)
+                            </Button>
                         </div>
                     </div>
                 </CardHeader>
@@ -331,8 +372,8 @@ export function AttackPathVisualizer() {
                                         {attackPaths[selectedPath].nodes.map((node, index) => (
                                             <div key={node.id} className="flex items-center gap-4 p-3 bg-white border rounded-lg">
                                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white ${node.criticality === 'critical' ? 'bg-red-600' :
-                                                        node.criticality === 'high' ? 'bg-orange-600' :
-                                                            node.criticality === 'medium' ? 'bg-yellow-600' : 'bg-green-600'
+                                                    node.criticality === 'high' ? 'bg-orange-600' :
+                                                        node.criticality === 'medium' ? 'bg-yellow-600' : 'bg-green-600'
                                                     }`}>
                                                     {getNodeIcon(node.type)}
                                                 </div>
