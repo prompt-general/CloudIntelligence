@@ -109,6 +109,14 @@ class ScoringEngine:
             if resource.get('access_count_30d', 0) == 0:
                 base_score -= 40
         
+        elif resource_type == 'azure:compute:virtualMachine':
+            if resource.get('avg_cpu_utilization', 0) < 5:
+                base_score -= 35
+        
+        elif resource_type == 'azure:storage:storageAccount':
+            if resource.get('access_count_30d', 0) == 0:
+                base_score -= 30
+        
         # Normalize score
         return max(0.0, min(100.0, base_score))
     
@@ -152,6 +160,14 @@ class ScoringEngine:
         elif resource_type == 'gcp:storage:bucket':
             if not resource.get('public_access_prevention', False):
                 base_score -= 40
+
+        elif resource_type == 'azure:compute:virtualMachine':
+            if resource.get('is_public', False):
+                base_score -= 40
+        
+        elif resource_type == 'azure:storage:storageAccount':
+            if resource.get('allow_blob_public_access', False):
+                base_score -= 50
         
         # Normalize score
         return max(0.0, min(100.0, base_score))
