@@ -86,6 +86,28 @@ class SecurityScanner:
         if account.provider == "aws":
             aws_findings = await self._scan_aws_account(account)
             findings.extend(aws_findings)
+        elif account.provider == "gcp":
+            from app.services.gcp.scanner import GCPScanner
+            gcp_scanner = GCPScanner(self.db)
+            _, gcp_findings = await gcp_scanner.scan_account(account)
+            
+            # Convert GCP findings to SecurityFinding objects
+            for f in gcp_findings:
+                findings.append(SecurityFinding(
+                    id=f"{f['rule_id']}_{account.account_id}",
+                    resource_id=f.get("resource_id", "unknown"),
+                    resource_type=f.get("resource_type", "unknown"),
+                    account_id=account.account_id,
+                    region=f.get("region", "global"),
+                    rule_id=f["rule_id"],
+                    title=f["title"],
+                    description=f["description"],
+                    severity=SecuritySeverity(f["severity"]),
+                    category=SecurityCategory.CONFIGURATION,
+                    remediation="Follow GCP best practices to remediate this issue.",
+                    evidence=f,
+                    detected_at=datetime.utcnow()
+                ))
         
         return findings
     
